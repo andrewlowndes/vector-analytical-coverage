@@ -1,4 +1,4 @@
-use glm::{abs, acos, atan2, cos, max, min, pow, sign, sin, sqrt, vec2, Vec2, mix_s, distance};
+use glm::{abs, acos, atan2, cos, distance, max, min, mix_s, pow, sign, sin, sqrt, vec2, Vec2};
 use std::cmp::Ordering;
 
 #[derive(Clone, PartialEq, Debug)]
@@ -118,8 +118,7 @@ pub fn line_dir(line: &Line) -> Vec2 {
 
 pub fn line_angle(line: &Line) -> f32 {
     let dir = line.b - line.a;
-    let response = -atan2(dir.x, dir.y);
-    response
+    -atan2(dir.x, dir.y)
 }
 
 pub fn line_size(line: &Line) -> f32 {
@@ -316,7 +315,7 @@ pub fn clean_t(t: f32) -> f32 {
     } else if abs(t - 1.0) < EPSILON {
         1.0
     } else {*/
-        t
+    t
     //}
 }
 
@@ -386,11 +385,7 @@ pub fn line_quadratic_intersect(line: &Line, test: &Quadratic) -> Vec<Intersecti
         .map(clean_t)
         .filter(|t| in_range(*t, 0.0, 1.0))
         .filter_map(|t| {
-            let line_pos = mix_s(
-                mix_s(test_a, test_b, t),
-                mix_s(test_b, test_c, t),
-                t,
-            );
+            let line_pos = mix_s(mix_s(test_a, test_b, t), mix_s(test_b, test_c, t), t);
 
             let line_t = clean_t(line_pos.x / line_mag);
 
@@ -505,7 +500,7 @@ pub fn line_cubic_split(
 }
 
 pub fn point_in_shape(shape: &Shape, aabb: &Aabb, point: &Vec2) -> bool {
-    if !point_in_aabb(&aabb, point) {
+    if !point_in_aabb(aabb, point) {
         return false;
     }
 
@@ -558,7 +553,7 @@ pub fn point_in_shape(shape: &Shape, aabb: &Aabb, point: &Vec2) -> bool {
     }
 
     max_intersection
-        .map(|intersection| [IntersectLocation::Inside, IntersectLocation::OutsideToInside].contains(&intersection.location))
+        .map(|intersection| intersection.location == IntersectLocation::OutsideToInside)
         .unwrap_or_default()
 }
 

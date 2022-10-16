@@ -2,8 +2,9 @@ use glm::vec2;
 use minifb::{Key, Window, WindowOptions};
 use std::time::Duration;
 use svg::{
+    data::cubic_font::cubic_font_shape,
     shapes::{point_in_shape, shape_aabb},
-    slice2d::{rgb, Slice2d}, data::cubic_font::cubic_font_shape,
+    slice2d::{rgb, Slice2d},
 };
 
 const WIDTH: usize = 800;

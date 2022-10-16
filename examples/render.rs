@@ -2,8 +2,9 @@ use glm::vec2;
 use minifb::{Key, Window, WindowOptions};
 use std::time::Duration;
 use svg::{
-    shapes::{Line, in_range, clip_shape, shape_area, Shape},
-    slice2d::{rgb, Slice2d}, data::cubic_font::cubic_font_shape,
+    data::cubic_font::cubic_font_shape,
+    shapes::{clip_shape, in_range, shape_area, Line, Shape},
+    slice2d::{rgb, Slice2d},
 };
 
 const WIDTH: usize = 800;
@@ -74,7 +75,7 @@ fn main() {
             ];
 
             let clipping_shape = Shape(clipping_lines, vec![], vec![]);
-            
+
             let clipped_shape = clip_shape(&shape, &clipping_shape.lines);
 
             let clipped_area = -shape_area(&clipped_shape);

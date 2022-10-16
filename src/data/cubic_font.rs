@@ -1,5 +1,5 @@
+use crate::shapes::{Cubic, Line, Quadratic, Shape};
 use glm::vec2;
-use crate::shapes::{Line, Cubic, Shape, Quadratic};
 
 pub fn cubic_font_shape() -> Shape {
     let lines: Vec<Line> = vec![

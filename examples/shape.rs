@@ -1,11 +1,16 @@
 use glm::vec2;
-use minifb::{Key, Window, WindowOptions, MouseButton, MouseMode};
-use std::{time::Duration, fs::{File, read_to_string}, io::Write};
-use svg::{
-    shapes::{clip_shape, Line, Shape},
-    slice2d::{rgb, Slice2d}, data::cubic_font::cubic_font_shape,
-};
+use minifb::{Key, MouseButton, MouseMode, Window, WindowOptions};
 use serde::{Deserialize, Serialize};
+use std::{
+    fs::{read_to_string, File},
+    io::Write,
+    time::Duration,
+};
+use svg::{
+    data::cubic_font::cubic_font_shape,
+    shapes::{clip_shape, Line, Shape},
+    slice2d::{rgb, Slice2d},
+};
 
 const WIDTH: usize = 800;
 const HEIGHT: usize = 600;
@@ -62,9 +67,10 @@ fn main() -> anyhow::Result<()> {
         cubic.d = (cubic.d * scale) + translate;
     }
 
-    let mut settings: Settings = read_to_string(SETTINGS_PATH).map_err(anyhow::Error::new).and_then(|str| {
-        serde_json::from_str(&str).map_err(anyhow::Error::new)
-    }).unwrap_or_default();
+    let mut settings: Settings = read_to_string(SETTINGS_PATH)
+        .map_err(anyhow::Error::new)
+        .and_then(|str| serde_json::from_str(&str).map_err(anyhow::Error::new))
+        .unwrap_or_default();
 
     let clipping_vertices = vec![
         vec2(200.0 + settings.delta_x, 100.0 + settings.delta_y),
@@ -92,7 +98,7 @@ fn main() -> anyhow::Result<()> {
                 if mouse_dragging {
                     let delta_x = mouse_pos.0 - last_mouse_pos.0;
                     let delta_y = mouse_pos.1 - last_mouse_pos.1;
-    
+
                     for line in clipping_shape.lines.iter_mut() {
                         line.a.x += delta_x;
                         line.a.y += delta_y;
@@ -122,8 +128,7 @@ fn main() -> anyhow::Result<()> {
         let clipped_shape = clip_shape(&shape, &clipping_shape.lines);
         buffer.shape(&clipped_shape, blue);
 
-        window
-            .update_with_buffer(&buffer.data, WIDTH, HEIGHT)?
+        window.update_with_buffer(&buffer.data, WIDTH, HEIGHT)?
     }
 
     //store the coords in a json file so we can re-use them next time it opens
@@ -131,6 +136,6 @@ fn main() -> anyhow::Result<()> {
     settings.delta_y = clipping_shape.lines[0].a.y - 100.0;
 
     File::create(SETTINGS_PATH)?.write_all(&serde_json::to_vec(&settings)?)?;
-    
+
     Ok(())
 }

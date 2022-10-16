@@ -2,7 +2,7 @@ use glm::vec2;
 use minifb::{Key, Window, WindowOptions};
 use std::time::Duration;
 use svg::{
-    shapes::{Line, Quadratic, line_quadratic_intersect},
+    shapes::{line_quadratic_intersect, Line, Quadratic},
     slice2d::{rgb, Slice2d},
 };
 
@@ -35,16 +35,36 @@ fn main() {
 
     let point_radius = 2;
     let point_diameter = point_radius * 2;
-    
+
     while window.is_open() && !window.is_key_down(Key::Escape) {
         buffer.data.fill(0);
 
         //buffer.line(line1.a.x as i32, line1.a.y as i32, line1.b.x as i32, line1.b.y as i32, red);
-        buffer.quadratic(quadratic.a.x as i32, quadratic.a.y as i32, quadratic.b.x as i32, quadratic.b.y as i32, quadratic.c.x as i32, quadratic.c.y as i32, red);
-        buffer.line(line2.a.x as i32, line2.a.y as i32, line2.b.x as i32, line2.b.y as i32, green);
+        buffer.quadratic(
+            quadratic.a.x as i32,
+            quadratic.a.y as i32,
+            quadratic.b.x as i32,
+            quadratic.b.y as i32,
+            quadratic.c.x as i32,
+            quadratic.c.y as i32,
+            red,
+        );
+        buffer.line(
+            line2.a.x as i32,
+            line2.a.y as i32,
+            line2.b.x as i32,
+            line2.b.y as i32,
+            green,
+        );
 
         for intersection in line_quadratic_intersect(&line2, &quadratic) {
-            buffer.rectangle(intersection.pos.x as i32 - point_radius, intersection.pos.y as i32 - point_radius, point_diameter as usize, point_diameter as usize, blue);
+            buffer.rectangle(
+                intersection.pos.x as i32 - point_radius,
+                intersection.pos.y as i32 - point_radius,
+                point_diameter as usize,
+                point_diameter as usize,
+                blue,
+            );
         }
 
         window
