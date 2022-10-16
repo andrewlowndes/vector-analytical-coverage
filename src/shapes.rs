@@ -253,6 +253,7 @@ pub fn quadratic(a: f32, b: f32, c: f32) -> Vec<f32> {
     vec![(-b + nom) / denom, (-b - nom) / denom]
 }
 
+
 pub fn cubic(a: f32, b: f32, c: f32, d: f32) -> Vec<f32> {
     if abs(a) < EPSILON {
         return quadratic(b, c, d);
@@ -310,13 +311,15 @@ pub fn clean_t(t: f32) -> f32 {
     //console.log(t);
 
     //allow a little overlap at the extremes, snapping to the value
-    /*if abs(t) < EPSILON {
+    /*
+    if abs(t) < EPSILON {
         0.0
     } else if abs(t - 1.0) < EPSILON {
         1.0
-    } else {*/
+    } else {
+        t
+    } */
     t
-    //}
 }
 
 pub fn line_line_intersect(line: &Line, test: &Line) -> Vec<Intersection> {
@@ -331,7 +334,7 @@ pub fn line_line_intersect(line: &Line, test: &Line) -> Vec<Intersection> {
     let derivative = sign(a);
     let line_mag = line_size(line);
 
-    let ts = if test_a.y == 0.0 && derivative == 0.0 {
+    let ts = if abs(test_a.y) < EPSILON && abs(test_b.y) < EPSILON {
         //parallel lines, 2 or 0 intersections based on the entry and exit points
         let test_mag = line_size(test);
         let line_a = rotate_point(line.a - test.a, angle);
@@ -607,6 +610,7 @@ pub fn clip_shape(shape: &Shape, clipping_lines: &[Line]) -> Shape {
                     IntersectLocation::Inside,
                 ]
                 .contains(&intersection.location)
+                && prev_intersection.pos != intersection.pos
             {
                 lines.push(Line(prev_intersection.pos, intersection.pos));
             }
@@ -620,6 +624,7 @@ pub fn clip_shape(shape: &Shape, clipping_lines: &[Line]) -> Shape {
         ]
         .contains(&prev_intersection.location)
             && point_in_lines(clipping_lines, &joint.b)
+            && prev_intersection.pos != joint.b
         {
             lines.push(Line(prev_intersection.pos, joint.b));
         }
@@ -789,6 +794,7 @@ pub fn clip_shape(shape: &Shape, clipping_lines: &[Line]) -> Shape {
                     IntersectLocation::OutsideToInside,
                 ]
                 .contains(&intersection.location)
+                && prev_intersection.pos != intersection.pos
             {
                 lines.push(Line(prev_intersection.pos, intersection.pos));
             }
@@ -802,6 +808,7 @@ pub fn clip_shape(shape: &Shape, clipping_lines: &[Line]) -> Shape {
         ]
         .contains(&prev_intersection.location)
             && point_in_shape(shape, &aabb, &clip_joint.b)
+            && prev_intersection.pos != clip_joint.b
         {
             lines.push(Line(prev_intersection.pos, clip_joint.b));
         }
