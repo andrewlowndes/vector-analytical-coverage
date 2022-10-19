@@ -3,7 +3,7 @@ use minifb::{Key, Window, WindowOptions};
 use std::time::Duration;
 use svg::{
     data::cubic_font::cubic_font_shape,
-    shapes::{point_in_shape, shape_aabb},
+    shapes::{point_in_shape, shape_aabb, transform_shape},
     slice2d::{rgb, Slice2d},
 };
 
@@ -31,24 +31,7 @@ fn main() {
     //scale and move the shape so we can see it
     let scale = 400.0;
     let translate = vec2(0.0, 400.0);
-
-    for line in &mut shape.lines {
-        line.a = (line.a * scale) + translate;
-        line.b = (line.b * scale) + translate;
-    }
-
-    for quadratic in &mut shape.quadratics {
-        quadratic.a = (quadratic.a * scale) + translate;
-        quadratic.b = (quadratic.b * scale) + translate;
-        quadratic.c = (quadratic.c * scale) + translate;
-    }
-
-    for cubic in &mut shape.cubics {
-        cubic.a = (cubic.a * scale) + translate;
-        cubic.b = (cubic.b * scale) + translate;
-        cubic.c = (cubic.c * scale) + translate;
-        cubic.d = (cubic.d * scale) + translate;
-    }
+    transform_shape(&mut shape, scale, translate);
 
     let mut offline_buffer = buffer.data.clone();
 
@@ -61,7 +44,7 @@ fn main() {
     let mut i = 0;
     for y in 0..HEIGHT {
         for x in 0..WIDTH {
-            if point_in_shape(&shape, &aabb, &vec2(x as f32, y as f32)) {
+            if point_in_shape(&shape, &aabb, &vec2(x as f32, y as f32), false) {
                 offline_buffer[i] = red;
             } else {
                 offline_buffer[i] = black;

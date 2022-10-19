@@ -1,5 +1,6 @@
 use glm::{abs, acos, atan2, cos, distance, max, min, mix_s, pow, sign, sin, sqrt, vec2, Vec2};
-use std::cmp::Ordering;
+use itertools::Itertools;
+use std::{cmp::Ordering, collections::VecDeque};
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Aabb {
@@ -64,7 +65,7 @@ pub fn Shape(lines: Vec<Line>, quadratics: Vec<Quadratic>, cubics: Vec<Cubic>) -
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum IntersectLocation {
     OnEdge,
     Outside,
@@ -103,6 +104,28 @@ pub fn Intersection(t: f32, line_t: f32, pos: Vec2, location: IntersectLocation)
 
 const EPSILON: f32 = f32::EPSILON; //this will need to be tinkered based on the precision of the float
 const TAU: f32 = std::f32::consts::TAU;
+
+pub fn transform_vec(vec: &mut Vec2, scale: f32, translate: Vec2) {
+    *vec = *vec * scale + translate;
+}
+
+pub fn transform_shape(shape: &mut Shape, scale: f32, translate: Vec2) {
+    for line in &mut shape.lines {
+        transform_vec(&mut line.a, scale, translate);
+        transform_vec(&mut line.b, scale, translate);
+    }
+    for quadratic in &mut shape.quadratics {
+        transform_vec(&mut quadratic.a, scale, translate);
+        transform_vec(&mut quadratic.b, scale, translate);
+        transform_vec(&mut quadratic.c, scale, translate);
+    }
+    for cubic in &mut shape.cubics {
+        transform_vec(&mut cubic.a, scale, translate);
+        transform_vec(&mut cubic.b, scale, translate);
+        transform_vec(&mut cubic.c, scale, translate);
+        transform_vec(&mut cubic.d, scale, translate);
+    }
+}
 
 pub fn in_range(val: f32, min_val: f32, max_val: f32) -> bool {
     (min_val..=max_val).contains(&val)
@@ -216,9 +239,13 @@ pub fn shape_area(shape: &Shape) -> f32 {
 
 pub fn point_in_lines(lines: &[Line], point: &Vec2) -> bool {
     //check the point is on the positive side of the joint
+    //for now just use one algorithm
+    
     lines
         .iter()
         .all(|joint| det2(*point - joint.a, line_dir(joint)) >= 0.0)
+    
+    //point_in_shape(&Shape(lines.to_vec(), vec![], vec![]), &lines_aabb(&lines), point)
 }
 
 pub fn point_in_aabb(aabb: &Aabb, point: &Vec2) -> bool {
@@ -306,20 +333,20 @@ pub fn rotate_point(point: Vec2, angle: f32) -> Vec2 {
     )
 }
 
+const ROUNDING_T: f32 = 0.0001;
+
 pub fn clean_t(t: f32) -> f32 {
     //t = parseFloat(t.toFixed(ROUNDING_PRECISION));
     //console.log(t);
 
-    //allow a little overlap at the extremes, snapping to the value
-    /*
-    if abs(t) < EPSILON {
+    //allow a little overlap at the extremes
+    if abs(t) < ROUNDING_T {
         0.0
-    } else if abs(t - 1.0) < EPSILON {
+    } else if abs(t - 1.0) < ROUNDING_T {
         1.0
     } else {
         t
-    } */
-    t
+    }
 }
 
 pub fn line_line_intersect(line: &Line, test: &Line) -> Vec<Intersection> {
@@ -461,6 +488,61 @@ pub fn line_cubic_intersect(line: &Line, test: &Cubic) -> Vec<Intersection> {
         .collect::<Vec<_>>()
 }
 
+pub fn line_cubic_intersect_debug(line: &Line, test: &Cubic) -> Vec<Intersection> {
+    //align the cubic curve to the line and then solve the equation
+    let angle = line_angle(line);
+    let test_a = rotate_point(test.a - line.a, angle);
+    let test_b = rotate_point(test.b - line.a, angle);
+    let test_c = rotate_point(test.c - line.a, angle);
+    let test_d = rotate_point(test.d - line.a, angle);
+
+    let a = -test_a.y + 3.0 * (test_b.y - test_c.y) + test_d.y;
+    let b = 3.0 * (test_a.y - 2.0 * test_b.y + test_c.y);
+    let c = 3.0 * (-test_a.y + test_b.y);
+    let d = test_a.y;
+
+    let derivative_a = 3.0 * a;
+    let derivative_b = 2.0 * b;
+    let derivative_c = c;
+
+    //rather than re-project the points back out
+    let ts = cubic(a, b, c, d).into_iter().map(clean_t);
+
+    let line_mag = line_size(line);
+
+    ts.into_iter()
+        .filter(|t| in_range(*t, 0.0, 1.0))
+        .filter_map(|t| {
+            let mid = mix_s(test_b, test_c, t);
+
+            let line_pos = mix_s(
+                mix_s(mix_s(test_a, test_b, t), mid, t),
+                mix_s(mid, mix_s(test_c, test_d, t), t),
+                t,
+            );
+
+            let line_t = clean_t(line_pos.x / line_mag);
+            dbg!(&line_t);
+        
+
+            if in_range(line_t, 0.0, 1.0) {
+                let pos = mix_s(line.a, line.b, line_t);
+
+                Some(Intersection(
+                    t,
+                    line_t,
+                    pos,
+                    IntersectLocation::from_winding(sign(
+                        derivative_a * t * t + derivative_b * t + derivative_c,
+                    )),
+                ))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+}
+
 pub fn line_quadratic_split(
     joint: &Quadratic,
     from_t: f32,
@@ -502,7 +584,7 @@ pub fn line_cubic_split(
     Cubic(*start_point, control_point1, control_point2, *end_point)
 }
 
-pub fn point_in_shape(shape: &Shape, aabb: &Aabb, point: &Vec2) -> bool {
+pub fn point_in_shape(shape: &Shape, aabb: &Aabb, point: &Vec2, debug: bool) -> bool {
     if !point_in_aabb(aabb, point) {
         return false;
     }
@@ -518,7 +600,7 @@ pub fn point_in_shape(shape: &Shape, aabb: &Aabb, point: &Vec2) -> bool {
 
         if point.y >= joint_aabb.min.y && point.y <= joint_aabb.max.y {
             for intersection in line_line_intersect(&scanline, joint) {
-                if intersection.location != IntersectLocation::OnEdge && intersection.pos.x > max_x
+                if intersection.location != IntersectLocation::OnEdge && in_range(intersection.pos.x, max_x, point.x)
                 {
                     max_x = intersection.pos.x;
                     max_intersection = Some(intersection);
@@ -532,7 +614,7 @@ pub fn point_in_shape(shape: &Shape, aabb: &Aabb, point: &Vec2) -> bool {
 
         if point.y >= joint_aabb.min.y && point.y <= joint_aabb.max.y {
             for intersection in line_quadratic_intersect(&scanline, joint) {
-                if intersection.location != IntersectLocation::OnEdge && intersection.pos.x > max_x
+                if intersection.location != IntersectLocation::OnEdge && in_range(intersection.pos.x, max_x, point.x)
                 {
                     max_x = intersection.pos.x;
                     max_intersection = Some(intersection);
@@ -546,7 +628,7 @@ pub fn point_in_shape(shape: &Shape, aabb: &Aabb, point: &Vec2) -> bool {
 
         if point.y >= joint_aabb.min.y && point.y <= joint_aabb.max.y {
             for intersection in line_cubic_intersect(&scanline, joint) {
-                if intersection.location != IntersectLocation::OnEdge && intersection.pos.x > max_x
+                if intersection.location != IntersectLocation::OnEdge && in_range(intersection.pos.x, max_x, point.x)
                 {
                     max_x = intersection.pos.x;
                     max_intersection = Some(intersection);
@@ -555,22 +637,28 @@ pub fn point_in_shape(shape: &Shape, aabb: &Aabb, point: &Vec2) -> bool {
         }
     }
 
+    if debug {
+        dbg!(&max_intersection, point);
+    }
+
     max_intersection
-        .map(|intersection| intersection.location == IntersectLocation::OutsideToInside)
+        .map(|intersection| intersection.location == IntersectLocation::OutsideToInside || intersection.pos == *point)
         .unwrap_or_default()
 }
 
-pub fn clip_shape(shape: &Shape, clipping_lines: &[Line]) -> Shape {
+pub fn clip_shape(shape: &Shape, clipping_lines: &[Line]) -> (Shape, VecDeque<Vec<Intersection>>) {
     let clipping_lines_aabb = lines_aabb(clipping_lines);
     let aabb = shape_aabb(shape);
 
     if !aabb_aabb_intersect(&clipping_lines_aabb, &aabb) {
-        return Shape(vec![], vec![], vec![]);
+        return (Shape(vec![], vec![], vec![]), VecDeque::from(vec![]));
     }
 
     //TODO: replace, should not use any complex structures
-    let mut clip_joint_intersections: Vec<Vec<Intersection>> = vec![vec![]; clipping_lines.len()];
-    clip_joint_intersections.fill_with(Default::default);
+    let mut clip_joint_intersections_vec: Vec<Vec<Intersection>> = vec![vec![]; clipping_lines.len()];
+    clip_joint_intersections_vec.fill_with(Default::default);
+
+    let mut clip_joint_intersections = VecDeque::from(clip_joint_intersections_vec);
 
     let mut lines = vec![];
     for joint in &shape.lines {
@@ -610,7 +698,6 @@ pub fn clip_shape(shape: &Shape, clipping_lines: &[Line]) -> Shape {
                     IntersectLocation::Inside,
                 ]
                 .contains(&intersection.location)
-                && prev_intersection.pos != intersection.pos
             {
                 lines.push(Line(prev_intersection.pos, intersection.pos));
             }
@@ -624,7 +711,6 @@ pub fn clip_shape(shape: &Shape, clipping_lines: &[Line]) -> Shape {
         ]
         .contains(&prev_intersection.location)
             && point_in_lines(clipping_lines, &joint.b)
-            && prev_intersection.pos != joint.b
         {
             lines.push(Line(prev_intersection.pos, joint.b));
         }
@@ -762,57 +848,67 @@ pub fn clip_shape(shape: &Shape, clipping_lines: &[Line]) -> Shape {
         }
     }
 
-    //determine if the clipping polygon vertices are inside the shape we want to clip
-    //we also need to include the clipping shape joints where the shape goes outside the clipping shape
-    for (clip_index, clip_joint) in clipping_lines.iter().enumerate() {
-        //we now do the same splitting process with the clipping shape but re-using the intersection tests we have already done
-        let intersections = &mut clip_joint_intersections[clip_index];
+    //if we do not have intersections then our shape is either contained (1) or outside (0)
+    if lines.is_empty() && quadratics.is_empty() && cubics.is_empty() {
+        if clipping_lines.iter().all(|clip_joint| point_in_shape(shape, &aabb, &clip_joint.a, false)) {
+            lines.append(&mut clipping_lines.to_vec());
+        }
+    } else {
+        //determine if the clipping polygon vertices are inside the shape we want to clip
+        //we also need to include the clipping shape joints where the shape goes outside the clipping shape
+        for clip_joint in clipping_lines {
+            //we now do the same splitting process with the clipping shape but re-using the intersection tests we have already done
+            let mut intersections = clip_joint_intersections.pop_front().unwrap();
 
-        //need to ensure intersections are sorted too (vertex intersections have the same line_t and opposite windings)
-        //intersections = intersections.filter(intersection => intersection.t != 0 && intersection.t != 1 && intersection.line_t != 0 && intersection.line_t != 1);
-        intersections.sort_by(|a, b| {
-            a.line_t
-                .total_cmp(&b.line_t)
-                .then_with(|| a.location.cmp(&b.location))
-        });
+            //need to ensure intersections are sorted too (vertex intersections have the same line_t and opposite windings)
+            //intersections = intersections.filter(intersection => intersection.t != 0 && intersection.t != 1 && intersection.line_t != 0 && intersection.line_t != 1);
+            intersections.sort_by(|a, b| {
+                a.line_t
+                    .total_cmp(&b.line_t)
+                    .then_with(|| a.location.cmp(&b.location))
+            });
 
-        let location = if point_in_shape(shape, &aabb, &clip_joint.a) {
-            IntersectLocation::Inside
-        } else {
-            IntersectLocation::Outside
-        };
+            intersections = intersections.into_iter().unique_by(|item| ((item.line_t * 10000.0).floor() as u32, item.location)).collect::<Vec<_>>();
 
-        let mut prev_intersection = &Intersection(0.0, 0.0, clip_joint.a, location);
-        for intersection in intersections {
+            let location = if point_in_shape(shape, &aabb, &clip_joint.a, false) {
+                IntersectLocation::Inside
+            } else {
+                IntersectLocation::Outside
+            };
+
+            let mut prev_intersection = &Intersection(0.0, 0.0, clip_joint.a, location);
+            for intersection in intersections.iter() {
+                if [
+                    IntersectLocation::Inside,
+                    IntersectLocation::InsideToOutside,
+                ]
+                .contains(&prev_intersection.location)
+                    && [
+                        IntersectLocation::Inside,
+                        IntersectLocation::OutsideToInside,
+                    ]
+                    .contains(&intersection.location)
+                {
+                    lines.push(Line(prev_intersection.pos, intersection.pos));
+                }
+                prev_intersection = intersection;
+            }
+
+            //repeat for the last point in the joint too
             if [
                 IntersectLocation::Inside,
                 IntersectLocation::InsideToOutside,
             ]
             .contains(&prev_intersection.location)
-                && [
-                    IntersectLocation::Inside,
-                    IntersectLocation::OutsideToInside,
-                ]
-                .contains(&intersection.location)
-                && prev_intersection.pos != intersection.pos
+                && point_in_shape(shape, &aabb, &clip_joint.b, false)
             {
-                lines.push(Line(prev_intersection.pos, intersection.pos));
+                lines.push(Line(prev_intersection.pos, clip_joint.b));
             }
-            prev_intersection = intersection;
-        }
 
-        //repeat for the last point in the joint too
-        if [
-            IntersectLocation::Inside,
-            IntersectLocation::InsideToOutside,
-        ]
-        .contains(&prev_intersection.location)
-            && point_in_shape(shape, &aabb, &clip_joint.b)
-            && prev_intersection.pos != clip_joint.b
-        {
-            lines.push(Line(prev_intersection.pos, clip_joint.b));
+            //push the transformed intersections back on the end so we can debug
+            clip_joint_intersections.push_back(intersections);
         }
     }
 
-    Shape(lines, quadratics, cubics)
+    (Shape(lines, quadratics, cubics), clip_joint_intersections)
 }

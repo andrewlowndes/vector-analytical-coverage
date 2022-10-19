@@ -8,7 +8,7 @@ use std::{
 };
 use svg::{
     data::cubic_font::cubic_font_shape,
-    shapes::{clip_shape, Line, Shape},
+    shapes::{clip_shape, Line, Shape, transform_shape},
     slice2d::{rgb, Slice2d},
 };
 
@@ -48,24 +48,7 @@ fn main() -> anyhow::Result<()> {
     //scale and move the shape so we can see it
     let scale = 400.0;
     let translate = vec2(0.0, 400.0);
-
-    for line in &mut shape.lines {
-        line.a = (line.a * scale) + translate;
-        line.b = (line.b * scale) + translate;
-    }
-
-    for quadratic in &mut shape.quadratics {
-        quadratic.a = (quadratic.a * scale) + translate;
-        quadratic.b = (quadratic.b * scale) + translate;
-        quadratic.c = (quadratic.c * scale) + translate;
-    }
-
-    for cubic in &mut shape.cubics {
-        cubic.a = (cubic.a * scale) + translate;
-        cubic.b = (cubic.b * scale) + translate;
-        cubic.c = (cubic.c * scale) + translate;
-        cubic.d = (cubic.d * scale) + translate;
-    }
+    transform_shape(&mut shape, scale, translate);
 
     let mut settings: Settings = read_to_string(SETTINGS_PATH)
         .map_err(anyhow::Error::new)
@@ -125,7 +108,7 @@ fn main() -> anyhow::Result<()> {
         buffer.shape(&clipping_shape, green);
 
         //intersect a clipping shape and produce a new shape and then overlay
-        let clipped_shape = clip_shape(&shape, &clipping_shape.lines);
+        let (clipped_shape, _intersections) = clip_shape(&shape, &clipping_shape.lines);
         buffer.shape(&clipped_shape, blue);
 
         window.update_with_buffer(&buffer.data, WIDTH, HEIGHT)?
