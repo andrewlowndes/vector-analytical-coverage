@@ -3,7 +3,7 @@ use minifb::{Key, Window, WindowOptions};
 use std::{time::Duration, f32::EPSILON};
 use svg::{
     data::cubic_font::cubic_font_shape,
-    shapes::{clip_shape, in_range, shape_area, Line, Shape, shape_aabb, transform_shape, aabb_aabb_intersect, cubic_aabb, line_cubic_intersect, line_cubic_intersect_debug, point_in_shape},
+    shapes::{clip_shape, in_range, shape_area, Line, Shape, shape_aabb, transform_shape, aabb_aabb_intersect, cubic_aabb, line_cubic_intersect, point_in_shape},
     slice2d::{rgb, Slice2d},
 };
 
@@ -27,6 +27,8 @@ fn main() {
     window.limit_update_rate(Some(Duration::from_micros(16600)));
 
     let mut shape = cubic_font_shape();
+
+    let debug_deep = true;
 
     //scale and move the shape so we can see it
     let scale = 400.0;
@@ -65,47 +67,48 @@ fn main() {
             let clipped_area = -shape_area(&clipped_shape);
             let alpha = (clipped_area * 255.0).floor() as u8;
 
-            if clipped_area > 1.1 {
+            if clipped_area > 1.1 || clipped_area < -0.1 {
                 //if the area exceeds the 0-1 range (allow for a margin) then there is an error so show it
-                /*
-                dbg!(&intersections);
+                if debug_deep {
+                    dbg!(&intersections);
 
-                let clipping_aabb = shape_aabb(&clipping_shape);
-                for joint in &shape.cubics {
-                    if !aabb_aabb_intersect(&clipping_aabb, &cubic_aabb(joint)) {
-                        continue;
+                    /*
+                    let clipping_aabb = shape_aabb(&clipping_shape);
+                    for joint in &shape.cubics {
+                        if !aabb_aabb_intersect(&clipping_aabb, &cubic_aabb(joint)) {
+                            continue;
+                        }
+
+                        for (_clip_index, clip_joint) in clipping_shape.lines.iter().enumerate() {
+                            dbg!(joint, line_cubic_intersect(clip_joint, joint));
+                        }
                     }
 
                     for (_clip_index, clip_joint) in clipping_shape.lines.iter().enumerate() {
-                        dbg!(joint, line_cubic_intersect_debug(clip_joint, joint));
-                    }
+                        dbg!(point_in_shape(&shape, &aabb, &clip_joint.a, true));
+                    }*/
+        
+                    let clipped_aabb = shape_aabb(&clipped_shape);
+                    let clipped_square = clipped_aabb.max - clipped_aabb.min;
+                    let clipped_square_area = clipped_square.x * clipped_square.y;
+
+                    //zoom into the clipping shape so we can see what is going on
+                    let clipping_aabb = shape_aabb(&clipping_shape);
+                    let scale = 200.0;
+                    let translate = (-clipping_aabb.min * scale) + 100.0;
+
+                    transform_shape(&mut shape, scale, translate);
+                    transform_shape(&mut clipping_shape, scale, translate);
+                    transform_shape(&mut clipped_shape, scale, translate);
+                    
+                    dbg!(&clipped_shape, &clipped_area, &alpha, &clipped_square_area);
+                    offline_buffer.data.fill(0);
+
+                    offline_buffer.shape(&shape, red);
+                    offline_buffer.shape(&clipping_shape, green);
+                    offline_buffer.shape(&clipped_shape, blue);
+                    break 'outer;
                 }
-
-                for (_clip_index, clip_joint) in clipping_shape.lines.iter().enumerate() {
-                    dbg!(point_in_shape(&shape, &aabb, &clip_joint.a, true));
-                }
-    
-                let clipped_aabb = shape_aabb(&clipped_shape);
-                let clipped_square = clipped_aabb.max - clipped_aabb.min;
-                let clipped_square_area = clipped_square.x * clipped_square.y;
-
-                //zoom into the clipping shape so we can see what is going on
-                let clipping_aabb = shape_aabb(&clipping_shape);
-                let scale = 200.0;
-                let translate = (-clipping_aabb.min * scale) + 100.0;
-
-                transform_shape(&mut shape, scale, translate);
-                transform_shape(&mut clipping_shape, scale, translate);
-                transform_shape(&mut clipped_shape, scale, translate);
-                
-                dbg!(&clipped_shape, &clipped_area, &alpha, &clipped_square_area);
-                offline_buffer.data.fill(0);
-
-                offline_buffer.shape(&shape, red);
-                offline_buffer.shape(&clipping_shape, green);
-                offline_buffer.shape(&clipped_shape, blue);
-                break 'outer;
-                */
                 
                 //draw the pixel trying to shade as green and then carry on (good for showing number of incorrect pixels)
                 offline_buffer.data[i] = green;

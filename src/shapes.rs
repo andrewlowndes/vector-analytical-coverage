@@ -340,13 +340,14 @@ pub fn clean_t(t: f32) -> f32 {
     //console.log(t);
 
     //allow a little overlap at the extremes
-    if abs(t) < ROUNDING_T {
+    /*if abs(t) < ROUNDING_T {
         0.0
     } else if abs(t - 1.0) < ROUNDING_T {
         1.0
     } else {
         t
-    }
+    }*/
+    t
 }
 
 pub fn line_line_intersect(line: &Line, test: &Line) -> Vec<Intersection> {
@@ -366,7 +367,7 @@ pub fn line_line_intersect(line: &Line, test: &Line) -> Vec<Intersection> {
         let test_mag = line_size(test);
         let line_a = rotate_point(line.a - test.a, angle);
         let line_b = rotate_point(line.b - test.a, angle);
-
+  
         vec![0.0, 1.0, line_a.x / test_mag, line_b.x / test_mag]
     } else {
         linear(a, b).into_iter().map(clean_t).collect::<Vec<_>>()
@@ -469,61 +470,6 @@ pub fn line_cubic_intersect(line: &Line, test: &Cubic) -> Vec<Intersection> {
             );
 
             let line_t = clean_t(line_pos.x / line_mag);
-
-            if in_range(line_t, 0.0, 1.0) {
-                let pos = mix_s(line.a, line.b, line_t);
-
-                Some(Intersection(
-                    t,
-                    line_t,
-                    pos,
-                    IntersectLocation::from_winding(sign(
-                        derivative_a * t * t + derivative_b * t + derivative_c,
-                    )),
-                ))
-            } else {
-                None
-            }
-        })
-        .collect::<Vec<_>>()
-}
-
-pub fn line_cubic_intersect_debug(line: &Line, test: &Cubic) -> Vec<Intersection> {
-    //align the cubic curve to the line and then solve the equation
-    let angle = line_angle(line);
-    let test_a = rotate_point(test.a - line.a, angle);
-    let test_b = rotate_point(test.b - line.a, angle);
-    let test_c = rotate_point(test.c - line.a, angle);
-    let test_d = rotate_point(test.d - line.a, angle);
-
-    let a = -test_a.y + 3.0 * (test_b.y - test_c.y) + test_d.y;
-    let b = 3.0 * (test_a.y - 2.0 * test_b.y + test_c.y);
-    let c = 3.0 * (-test_a.y + test_b.y);
-    let d = test_a.y;
-
-    let derivative_a = 3.0 * a;
-    let derivative_b = 2.0 * b;
-    let derivative_c = c;
-
-    //rather than re-project the points back out
-    let ts = cubic(a, b, c, d).into_iter().map(clean_t);
-
-    let line_mag = line_size(line);
-
-    ts.into_iter()
-        .filter(|t| in_range(*t, 0.0, 1.0))
-        .filter_map(|t| {
-            let mid = mix_s(test_b, test_c, t);
-
-            let line_pos = mix_s(
-                mix_s(mix_s(test_a, test_b, t), mid, t),
-                mix_s(mid, mix_s(test_c, test_d, t), t),
-                t,
-            );
-
-            let line_t = clean_t(line_pos.x / line_mag);
-            dbg!(&line_t);
-        
 
             if in_range(line_t, 0.0, 1.0) {
                 let pos = mix_s(line.a, line.b, line_t);
@@ -698,6 +644,7 @@ pub fn clip_shape(shape: &Shape, clipping_lines: &[Line]) -> (Shape, VecDeque<Ve
                     IntersectLocation::Inside,
                 ]
                 .contains(&intersection.location)
+                && prev_intersection.pos != intersection.pos
             {
                 lines.push(Line(prev_intersection.pos, intersection.pos));
             }
@@ -711,6 +658,7 @@ pub fn clip_shape(shape: &Shape, clipping_lines: &[Line]) -> (Shape, VecDeque<Ve
         ]
         .contains(&prev_intersection.location)
             && point_in_lines(clipping_lines, &joint.b)
+            && prev_intersection.pos != joint.b
         {
             lines.push(Line(prev_intersection.pos, joint.b));
         }
@@ -850,7 +798,8 @@ pub fn clip_shape(shape: &Shape, clipping_lines: &[Line]) -> (Shape, VecDeque<Ve
 
     //if we do not have intersections then our shape is either contained (1) or outside (0)
     if lines.is_empty() && quadratics.is_empty() && cubics.is_empty() {
-        if clipping_lines.iter().all(|clip_joint| point_in_shape(shape, &aabb, &clip_joint.a, false)) {
+        //if there are at least half of the point inside then assume the whole pixel is inside
+        if clipping_lines.iter().filter(|clip_joint| point_in_shape(shape, &aabb, &clip_joint.a, false)).count() > 2 {
             lines.append(&mut clipping_lines.to_vec());
         }
     } else {
@@ -868,7 +817,8 @@ pub fn clip_shape(shape: &Shape, clipping_lines: &[Line]) -> (Shape, VecDeque<Ve
                     .then_with(|| a.location.cmp(&b.location))
             });
 
-            intersections = intersections.into_iter().unique_by(|item| ((item.line_t * 10000.0).floor() as u32, item.location)).collect::<Vec<_>>();
+            //TODO: customise the precision here (merges collision points)
+            intersections = intersections.into_iter().filter(|item| item.location != IntersectLocation::OnEdge).unique_by(|item| ((item.line_t * 10000.0).floor() as u32, item.location)).collect::<Vec<_>>();
 
             let location = if point_in_shape(shape, &aabb, &clip_joint.a, false) {
                 IntersectLocation::Inside
@@ -888,6 +838,7 @@ pub fn clip_shape(shape: &Shape, clipping_lines: &[Line]) -> (Shape, VecDeque<Ve
                         IntersectLocation::OutsideToInside,
                     ]
                     .contains(&intersection.location)
+                    && prev_intersection.pos != intersection.pos
                 {
                     lines.push(Line(prev_intersection.pos, intersection.pos));
                 }
@@ -901,6 +852,7 @@ pub fn clip_shape(shape: &Shape, clipping_lines: &[Line]) -> (Shape, VecDeque<Ve
             ]
             .contains(&prev_intersection.location)
                 && point_in_shape(shape, &aabb, &clip_joint.b, false)
+                && prev_intersection.pos != clip_joint.b
             {
                 lines.push(Line(prev_intersection.pos, clip_joint.b));
             }
